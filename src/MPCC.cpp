@@ -332,29 +332,19 @@ int pcc_matrix(int m, int n, int p,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
          m, p, n, alpha, amask, n, bmask, n, beta, N, p);
 
-    printf("N\n");
-    print_matrix(N, m, p);
-
-
     //vsSqr(m*n,A,AA);
     // VSQR(m*n,A,AA);
-    printf("AA\n");
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*n; i++) {
       AA[i] = A[i] * A[i];
-      printf("%f ", AA[i]);
     }
-    printf("\n");
 
     //vsSqr(n*p,B,BB);
     // VSQR(n*p,B,BB);
-    printf("BB\n");
     #pragma omp parallel for private(i)
     for(int i = 0; i < n*p; i++) {
       BB[i] = B[i] * B[i];
-      printf("%f ", BB[i]);
     }
-    printf("\n");
 
     //variables used for performance timing
     //struct timespec startGEMM, stopGEMM;
@@ -382,9 +372,6 @@ int pcc_matrix(int m, int n, int p,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, A, n, UnitB, ldb, beta, SA, p); 
 
-    printf("SA\n");
-    print_matrix(SA, m, p);
-
     //SB = B*UnitA
     //Compute sum of B for each AB row col pair.
     // This requires multiplication with a UnitA matrix which acts as a mask 
@@ -392,10 +379,6 @@ int pcc_matrix(int m, int n, int p,
     //cblas_sgemm(NoTrans, transB,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, UnitA, n, B, ldb, beta, SB, p);
-
-    printf("SB\n");
-    print_matrix(SB, m, p);
-
 
     //SAA = AA*UnitB
     //Compute sum of AA for each AB row col pair.
@@ -405,9 +388,6 @@ int pcc_matrix(int m, int n, int p,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, AA, n, UnitB, ldb, beta, SAA, p); 
 
-    printf("SAA\n");
-    print_matrix(SAA, m, p);
-
     //SBB = BB*UnitA
     //Compute sum of BB for each AB row col pair.
     // This requires multiplication with a UnitA matrix which acts as a mask 
@@ -415,9 +395,6 @@ int pcc_matrix(int m, int n, int p,
     //cblas_sgemm(NoTrans, transB,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, UnitA, n, BB, ldb, beta, SBB, p); 
-    
-    printf("SBB\n");
-    print_matrix(SBB, m, p);
 
     free(UnitA);
     free(UnitB);
@@ -428,9 +405,6 @@ int pcc_matrix(int m, int n, int p,
     //cblas_sgemm(NoTrans, transB,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, A, n, B, ldb, beta, SAB, p); 
-    
-    printf("SAB\n");
-    print_matrix(SAB, m, p);
 
     //clock_gettime(CLOCK_MONOTONIC, &stopGEMM);
     //accumGEMM =  (TimeSpecToSeconds(&stopGEMM)- TimeSpecToSeconds(&startGEMM));
@@ -456,8 +430,6 @@ int pcc_matrix(int m, int n, int p,
     for(int i = 0; i < m*p; i++) {
       SASB[i] = SA[i] * SB[i];
     }
-    printf("SASB\n");
-    print_matrix(SASB, m, p);
     //N*SAB
     // VMUL(m*p,N,SAB,NSAB); //ceb
     #pragma omp parallel for private(i)
@@ -465,17 +437,12 @@ int pcc_matrix(int m, int n, int p,
       NSAB[i] = N[i] * SAB[i];
     }
 
-    printf("NSAB\n");
-    print_matrix(NSAB, m, p);
-
     //NSAB=(-1)NSAB+SASB  (numerator)
     // AXPY(m*p,(DataType)(-1), SASB,1, NSAB,1); //ceb
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
-      NSAB[i] = SASB[i] - NSAB[i];
+      NSAB[i] -= SASB[i];
     }
-    printf("NSAB\n");
-    print_matrix(NSAB, m, p);
 
     //(SA)^2
     // VSQR(m*p,SA,SASA);
@@ -483,24 +450,18 @@ int pcc_matrix(int m, int n, int p,
     for(int i = 0; i < m*p; i++) {
       SASA[i] = SA[i] * SA[i];
     }
-    printf("SASA\n");
-    print_matrix(SASA, m, p);
     //N(SAA)
     // VMUL(m*p,N,SAA,NSAA); //cebSCAL();
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
       NSAA[i] = N[i] * SAA[i];
     }
-    printf("NSAA\n");
-    print_matrix(NSAA, m, p);
     //NSAA=NSAA-SASA (denominator term 1)
     // AXPY(m*p,(DataType)(-1), SASA,1, NSAA,1);
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
-      NSAA[i] = NSAA[i] - SASA[i];
+      NSAA[i] -= SASA[i];
     }
-    printf("NSAA\n");
-    print_matrix(NSAA, m, p);
 
     //(SB)^2
     // VSQR(m*p,SB,SBSB);
@@ -508,24 +469,18 @@ int pcc_matrix(int m, int n, int p,
     for(int i = 0; i < m*p; i++) {
       SBSB[i] = SB[i] * SB[i];
     }
-    printf("SBSB\n");
-    print_matrix(SBSB, m, p);
     //N(SBB)
     // VMUL(m*p,N,SBB,NSBB);
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
       NSBB[i] = N[i] * SBB[i];
     }
-    printf("NSBB\n");
-    print_matrix(NSBB, m, p);
     //NSBB=NSBB-SBSB (denominatr term 2)
     // AXPY(m*p,(DataType)(-1), SBSB,1, NSBB,1);
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
-      NSBB[i] = NSBB[i] * SBSB[i];
+      NSBB[i] -= SBSB[i];
     }
-    printf("NSBB\n");
-    print_matrix(NSBB, m, p);
 
     //DENOM=NSAA*NSBB (element wise multiplication)
     // VMUL(m*p,NSAA,NSBB,DENOM);
@@ -533,30 +488,22 @@ int pcc_matrix(int m, int n, int p,
     for(int i = 0; i < m*p; i++) {
       DENOM[i] = NSAA[i] * NSBB[i];
     }
-    printf("DENOM\n");
-    print_matrix(DENOM, m, p);
     #pragma omp parallel for private(i)
     for(int i=0;i<m*p;++i){
       if(DENOM[i]==0.){DENOM[i]=1;}//numerator will be 0 so to prevent inf, set denom to 1
     }
-    printf("DENOM\n");
-    print_matrix(DENOM, m, p);
     //sqrt(DENOM)
     // VSQRT(m*p,DENOM,DENOMSqrt);
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
       DENOMSqrt[i] = sqrt(DENOM[i]);
     }
-    printf("DENOMSqrt\n");
-    print_matrix(DENOMSqrt, m, p);
     //P=NSAB/DENOMSqrt (element wise division)
     // VDIV(m*p,NSAB,DENOMSqrt,P); 
     #pragma omp parallel for private(i)
     for(int i = 0; i < m*p; i++) {
       P[i] = NSAB[i] / DENOMSqrt[i];
-    }  
-    printf("P\n");
-    print_matrix(P, m, p);
+    }
 
     free(SASB);
     free(NSAB);
