@@ -11,6 +11,7 @@
 // ./MPCC MatA_filename MatB_filename 
 
 #include "MPCC.h"
+#include "cblas.h"
 
 using namespace std;
 
@@ -230,7 +231,15 @@ void initialize(int &m, int &n, int &p, int seed,
 
 #endif
 
-#ifndef NOMKL
+void print_matrix(DataType* mat, int rows, int cols) {
+  for(int i = 0; i < rows; i++) {
+    for(int j = 0; j < cols; j++) {
+      printf("%f ", mat[cols*i + j]);
+    }
+    printf("\n");
+  }
+}
+
 
 //This function is the implementation of a matrix x matrix algorithm which computes a matrix of PCC values
 //but increases the arithmetic intensity of the naive pairwise vector x vector correlation
@@ -241,59 +250,43 @@ int pcc_matrix(int m, int n, int p,
                DataType* A, DataType* B, DataType* P)
 {
   int i,j,k;
-  int stride = ((n-1)/64 +1);
   DataType alpha=1.0;
   DataType beta=0.0;
   int count =1;
   bool transposeB = true; //assume this is always true. 
   //info("before calloc\n",1);
   //allocate and initialize and align memory needed to compute PCC
-  DataType *N = (DataType *) mkl_calloc( m*p,sizeof( DataType ), 64 );
-  __assume_aligned(N, 64);
-  DataType *M = (DataType *) mkl_calloc( m*p, sizeof( DataType ), 64 );
-  __assume_aligned(M, 64);
-  DataType* SA =    ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
-  __assume_aligned(SA, 64);
-  DataType* AA =    ( DataType*)mkl_calloc( m*n, sizeof(DataType), 64 ); 
-  __assume_aligned(AA, 64);
-  DataType* SAA =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 );
-  __assume_aligned(SAA, 64);
-  DataType* SB =    ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
-  __assume_aligned(SB, 64);
-  DataType* BB =    ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 ); 
-  __assume_aligned(BB, 64);
-  DataType* SBB =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
-  __assume_aligned(SBB, 64);
-  DataType* SAB =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 );
-  __assume_aligned(SAB, 64);
-  DataType* UnitA = ( DataType*)mkl_calloc( m*n, sizeof(DataType), 64 );
-  __assume_aligned(UnitA, 64);
-  DataType* UnitB = ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 );
-  __assume_aligned(UnitB, 64);  
-  DataType *amask=(DataType*)mkl_calloc( m*n, sizeof(DataType), 64);
-  __assume_aligned(amask, 64);
-  DataType *bmask=(DataType*)mkl_calloc( n*p, sizeof(DataType), 64);
-  __assume_aligned(bmask, 64);
+  DataType* N =     ( DataType*)calloc( m*p,sizeof(DataType) );
+  DataType* SA =    ( DataType*)calloc( m*p, sizeof(DataType) );
+  DataType* AA =    ( DataType*)calloc( m*n, sizeof(DataType) );
+  DataType* SAA =   ( DataType*)calloc( m*p, sizeof(DataType) );
+  DataType* SB =    ( DataType*)calloc( m*p, sizeof(DataType) );
+  DataType* BB =    ( DataType*)calloc( n*p, sizeof(DataType) );
+  DataType* SBB =   ( DataType*)calloc( m*p, sizeof(DataType) );
+  DataType* SAB =   ( DataType*)calloc( m*p, sizeof(DataType) );
+  DataType* UnitA = ( DataType*)calloc( m*n, sizeof(DataType) );
+  DataType* UnitB = ( DataType*)calloc( n*p, sizeof(DataType) );
+  DataType* amask=  ( DataType*)calloc( m*n, sizeof(DataType) );
+  DataType* bmask=  ( DataType*)calloc( n*p, sizeof(DataType) );
 
   //info("after calloc\n",1);
 
   //if any of the above allocations failed, then we have run out of RAM on the node and we need to abort
-  if ( (N == NULL) | (M == NULL) | (SA == NULL) | (AA == NULL) | (SAA == NULL) | (SB == NULL) | (BB == NULL) | 
+  if ( (N == NULL) | (SA == NULL) | (AA == NULL) | (SAA == NULL) | (SB == NULL) | (BB == NULL) | 
       (SBB == NULL) | (SAB == NULL) | (UnitA == NULL) | (UnitB == NULL) | (amask == NULL) | (bmask == NULL)) {
     printf( "\n ERROR: Can't allocate memory for intermediate matrices. Aborting... \n\n");
-    mkl_free(N);
-    mkl_free(M);
-    mkl_free(SA);
-    mkl_free(AA);
-    mkl_free(SAA);
-    mkl_free(SB);
-    mkl_free(BB);
-    mkl_free(SBB);
-    mkl_free(SAB);
-    mkl_free(UnitA);
-    mkl_free(UnitB);
-    mkl_free(amask);
-    mkl_free(bmask);
+    free(N);
+    free(SA);
+    free(AA);
+    free(SAA);
+    free(SB);
+    free(BB);
+    free(SBB);
+    free(SAB);
+    free(UnitA);
+    free(UnitB);
+    free(amask);
+    free(bmask);
     #ifndef USING_R
     exit (0);
     #else
@@ -334,15 +327,34 @@ int pcc_matrix(int m, int n, int p,
       }
     }
 
-    GEMM(CblasRowMajor, CblasNoTrans, CblasTrans,
+    // GEMM(NoTrans, CblasTrans,
+    //     m, p, n, alpha, amask, n, bmask, n, beta, N, p);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
          m, p, n, alpha, amask, n, bmask, n, beta, N, p);
+
+    printf("N\n");
+    print_matrix(N, m, p);
 
 
     //vsSqr(m*n,A,AA);
-    VSQR(m*n,A,AA);
+    // VSQR(m*n,A,AA);
+    printf("AA\n");
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*n; i++) {
+      AA[i] = A[i] * A[i];
+      printf("%f ", AA[i]);
+    }
+    printf("\n");
 
     //vsSqr(n*p,B,BB);
-    VSQR(n*p,B,BB);
+    // VSQR(n*p,B,BB);
+    printf("BB\n");
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < n*p; i++) {
+      BB[i] = B[i] * B[i];
+      printf("%f ", BB[i]);
+    }
+    printf("\n");
 
     //variables used for performance timing
     //struct timespec startGEMM, stopGEMM;
@@ -366,118 +378,206 @@ int pcc_matrix(int m, int n, int p,
     //Compute sum of A for each AB row col pair.
     // This requires multiplication with a UnitB matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
-    //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    //cblas_sgemm(NoTrans, transB,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, A, n, UnitB, ldb, beta, SA, p); 
+
+    printf("SA\n");
+    print_matrix(SA, m, p);
 
     //SB = B*UnitA
     //Compute sum of B for each AB row col pair.
     // This requires multiplication with a UnitA matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
-    //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
-         m, p, n, alpha, UnitA, n, B, ldb, beta, SB, p); 
+    //cblas_sgemm(NoTrans, transB,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
+         m, p, n, alpha, UnitA, n, B, ldb, beta, SB, p);
+
+    printf("SB\n");
+    print_matrix(SB, m, p);
 
 
     //SAA = AA*UnitB
     //Compute sum of AA for each AB row col pair.
     // This requires multiplication with a UnitB matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
-    //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    //cblas_sgemm(NoTrans, transB,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, AA, n, UnitB, ldb, beta, SAA, p); 
+
+    printf("SAA\n");
+    print_matrix(SAA, m, p);
 
     //SBB = BB*UnitA
     //Compute sum of BB for each AB row col pair.
     // This requires multiplication with a UnitA matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
-    //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    //cblas_sgemm(NoTrans, transB,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, UnitA, n, BB, ldb, beta, SBB, p); 
+    
+    printf("SBB\n");
+    print_matrix(SBB, m, p);
 
-    mkl_free(UnitA);
-    mkl_free(UnitB);
-    mkl_free(AA);
-    mkl_free(BB);
+    free(UnitA);
+    free(UnitB);
+    free(AA);
+    free(BB);
 
     //SAB = A*B
-    //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    //cblas_sgemm(NoTrans, transB,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, A, n, B, ldb, beta, SAB, p); 
+    
+    printf("SAB\n");
+    print_matrix(SAB, m, p);
 
     //clock_gettime(CLOCK_MONOTONIC, &stopGEMM);
     //accumGEMM =  (TimeSpecToSeconds(&stopGEMM)- TimeSpecToSeconds(&startGEMM));
     //printf("All(5) GEMMs (%e)s GFLOPs=%e \n", accumGEMM, 5*(2/1.0e9)*m*n*p/accumGEMM);
 
-    DataType* SASB = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 );
-    DataType* NSAB = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 ); //ceb
+    DataType* SASB = ( DataType*)calloc( m*p,sizeof(DataType) );
+    DataType* NSAB = ( DataType*)calloc( m*p,sizeof(DataType) ); //ceb
    
-    DataType* SASA = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 ); 
-    DataType* NSAA = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 ); //ceb
+    DataType* SASA = ( DataType*)calloc( m*p,sizeof(DataType) ); 
+    DataType* NSAA = ( DataType*)calloc( m*p,sizeof(DataType) ); //ceb
     
-    DataType* SBSB = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 );    
-    DataType* NSBB = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 ); //ceb   
+    DataType* SBSB = ( DataType*)calloc( m*p,sizeof(DataType) );    
+    DataType* NSBB = ( DataType*)calloc( m*p,sizeof(DataType) ); //ceb   
     
-    DataType* DENOM = ( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 );
-    DataType* DENOMSqrt =( DataType*)mkl_calloc( m*p,sizeof(DataType), 64 ); 
+    DataType* DENOM = ( DataType*)calloc( m*p,sizeof(DataType) );
+    DataType* DENOMSqrt =( DataType*)calloc( m*p,sizeof(DataType) ); 
 
     //Compute and assemble composite terms
 
     //SASB=SA*SB
-    VMUL(m*p,SA,SB,SASB);
-    //N*SASB
-    VMUL(m*p,N,SAB,NSAB); //ceb
+    // VMUL(m*p,SA,SB,SASB);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      SASB[i] = SA[i] * SB[i];
+    }
+    printf("SASB\n");
+    print_matrix(SASB, m, p);
+    //N*SAB
+    // VMUL(m*p,N,SAB,NSAB); //ceb
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSAB[i] = N[i] * SAB[i];
+    }
 
-    //NSAB=(-1)NSASB+SAB  (numerator)
-    AXPY(m*p,(DataType)(-1), SASB,1, NSAB,1); //ceb
+    printf("NSAB\n");
+    print_matrix(NSAB, m, p);
+
+    //NSAB=(-1)NSAB+SASB  (numerator)
+    // AXPY(m*p,(DataType)(-1), SASB,1, NSAB,1); //ceb
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSAB[i] = SASB[i] - NSAB[i];
+    }
+    printf("NSAB\n");
+    print_matrix(NSAB, m, p);
 
     //(SA)^2
-    VSQR(m*p,SA,SASA);
+    // VSQR(m*p,SA,SASA);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      SASA[i] = SA[i] * SA[i];
+    }
+    printf("SASA\n");
+    print_matrix(SASA, m, p);
     //N(SAA)
-    VMUL(m*p,N,SAA,NSAA); //ceb
+    // VMUL(m*p,N,SAA,NSAA); //cebSCAL();
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSAA[i] = N[i] * SAA[i];
+    }
+    printf("NSAA\n");
+    print_matrix(NSAA, m, p);
     //NSAA=NSAA-SASA (denominator term 1)
-    AXPY(m*p,(DataType)(-1), SASA,1, NSAA,1);
+    // AXPY(m*p,(DataType)(-1), SASA,1, NSAA,1);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSAA[i] = NSAA[i] - SASA[i];
+    }
+    printf("NSAA\n");
+    print_matrix(NSAA, m, p);
 
     //(SB)^2
-    VSQR(m*p,SB,SBSB);
+    // VSQR(m*p,SB,SBSB);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      SBSB[i] = SB[i] * SB[i];
+    }
+    printf("SBSB\n");
+    print_matrix(SBSB, m, p);
     //N(SBB)
-    VMUL(m*p,N,SBB,NSBB);
+    // VMUL(m*p,N,SBB,NSBB);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSBB[i] = N[i] * SBB[i];
+    }
+    printf("NSBB\n");
+    print_matrix(NSBB, m, p);
     //NSBB=NSBB-SBSB (denominatr term 2)
-    AXPY(m*p,(DataType)(-1), SBSB,1, NSBB,1);
+    // AXPY(m*p,(DataType)(-1), SBSB,1, NSBB,1);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      NSBB[i] = NSBB[i] * SBSB[i];
+    }
+    printf("NSBB\n");
+    print_matrix(NSBB, m, p);
 
     //DENOM=NSAA*NSBB (element wise multiplication)
-    VMUL(m*p,NSAA,NSBB,DENOM);
-    for(int i=0;i<m*p;++i){
-       if(DENOM[i]==0.){DENOM[i]=1;}//numerator will be 0 so to prevent inf, set denom to 1
+    // VMUL(m*p,NSAA,NSBB,DENOM);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      DENOM[i] = NSAA[i] * NSBB[i];
     }
+    printf("DENOM\n");
+    print_matrix(DENOM, m, p);
+    #pragma omp parallel for private(i)
+    for(int i=0;i<m*p;++i){
+      if(DENOM[i]==0.){DENOM[i]=1;}//numerator will be 0 so to prevent inf, set denom to 1
+    }
+    printf("DENOM\n");
+    print_matrix(DENOM, m, p);
     //sqrt(DENOM)
-    VSQRT(m*p,DENOM,DENOMSqrt);
+    // VSQRT(m*p,DENOM,DENOMSqrt);
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      DENOMSqrt[i] = sqrt(DENOM[i]);
+    }
+    printf("DENOMSqrt\n");
+    print_matrix(DENOMSqrt, m, p);
     //P=NSAB/DENOMSqrt (element wise division)
-    VDIV(m*p,NSAB,DENOMSqrt,P);   
+    // VDIV(m*p,NSAB,DENOMSqrt,P); 
+    #pragma omp parallel for private(i)
+    for(int i = 0; i < m*p; i++) {
+      P[i] = NSAB[i] / DENOMSqrt[i];
+    }  
+    printf("P\n");
+    print_matrix(P, m, p);
 
-    mkl_free(SASB);
-    mkl_free(NSAB);
-    mkl_free(SASA);
-    mkl_free(NSAA);
-    mkl_free(SBSB);
-    mkl_free(NSBB);
-    mkl_free(DENOM);
-    mkl_free(DENOMSqrt); 
+    free(SASB);
+    free(NSAB);
+    free(SASA);
+    free(NSAA);
+    free(SBSB);
+    free(NSBB);
+    free(DENOM);
+    free(DENOMSqrt); 
   }
 
-  mkl_free(N);
-  mkl_free(SA);
-  mkl_free(SAA);
-  mkl_free(SB);
-  mkl_free(SBB);
-  mkl_free(SAB);
+  free(N);
+  free(SA);
+  free(SAA);
+  free(SB);
+  free(SBB);
+  free(SAB);
 
   return 0;
-};
+}
 
-#endif
-
-#ifndef NOMKL
 #ifdef PCC_VECTOR
 
 //This function uses bit arithmetic to mask vectors prior to performing a number of FMA's
@@ -758,7 +858,6 @@ int pcc_vector(int m, int n, int p,
   return 0;
 };
 
-#endif
 #endif
 
 #ifndef USING_R

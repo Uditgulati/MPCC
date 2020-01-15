@@ -8,13 +8,6 @@
 
     #define BILLION  1000000000L
 
-    #ifdef MKL // Disable the mkl as needed
-      #include <mkl.h>
-    #else
-      #define NOMKL 1
-      #include <math.h>
-    #endif
-
     #ifdef STANDALONE // Completely standalone (TODO: Implement LIB)
 
       // #error "Completely standalone (TODO: export as R-bound DYNLIB)"
@@ -55,20 +48,8 @@
 
   #if DOUBLE
     #define DataType double
-    #define VSQR vdSqr
-    #define VMUL vdMul
-    #define VSQRT vdSqrt
-    #define VDIV vdDiv
-    #define GEMM cblas_dgemm
-    #define AXPY cblas_daxpy
   #else
     #define DataType float
-    #define VSQR vsSqr
-    #define VMUL vsMul
-    #define VSQRT vsSqrt
-    #define VDIV  vsDiv
-    #define GEMM cblas_sgemm
-    #define AXPY cblas_saxpy
   #endif
 
 #ifdef __MINGW32__
