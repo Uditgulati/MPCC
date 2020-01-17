@@ -11,7 +11,6 @@
 // ./MPCC MatA_filename MatB_filename 
 
 #include "MPCC.h"
-#include "cblas.h"
 
 using namespace std;
 

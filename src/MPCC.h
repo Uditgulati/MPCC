@@ -8,6 +8,9 @@
 
     #define BILLION  1000000000L
 
+    #include <cblas.h>
+    #include <math.h>
+
     #ifdef STANDALONE // Completely standalone (TODO: Implement LIB)
 
       // #error "Completely standalone (TODO: export as R-bound DYNLIB)"
