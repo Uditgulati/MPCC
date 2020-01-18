@@ -8,7 +8,8 @@ PCC <- function(aM, bM = NULL, use = NULL, asMatrix = TRUE, debugOn = FALSE) {
                             n = as.integer(nrow(aM)), # nInd
                             m = as.integer(ncol(aM)), # nPhe A
                             p = as.integer(ncol(bM)), # nPhe B
-                            res = as.double(rep(0, ncol(aM) * ncol(bM))), NAOK = TRUE, package = "MPCC")
+                            res = as.double(rep(0, ncol(aM) * ncol(bM))),
+                            debugOn = as.logical(debugOn), NAOK = TRUE, package = "MPCC")
 
   if(asMatrix) res$res <- matrix(res$res, ncol(aM), ncol(bM), byrow=TRUE, dimnames = list(colnames(aM), colnames(bM)))
   if(debugOn) return(res)
@@ -23,7 +24,8 @@ PCC.naive <- function(aM, bM = NULL, use = NULL, asMatrix = TRUE, debugOn = FALS
                            n = as.integer(nrow(aM)), # nInd
                            m = as.integer(ncol(aM)), # nPhe A
                            p = as.integer(ncol(bM)), # nPhe B
-                           res = as.double(rep(0, ncol(aM) * ncol(bM))), NAOK = TRUE, package = "MPCC")
+                           res = as.double(rep(0, ncol(aM) * ncol(bM))),
+                           debugOn = as.logical(debugOn), NAOK = TRUE, package = "MPCC")
 
   if(asMatrix) res$res <- matrix(res$res, ncol(aM), ncol(bM), byrow=TRUE, dimnames = list(colnames(aM), colnames(bM)))
   if(debugOn) return(res)
