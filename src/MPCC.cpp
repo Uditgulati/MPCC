@@ -232,6 +232,21 @@ void initialize(int &m, int &n, int &p, int seed,
 
 #ifndef NOMKL
 
+bool check_same(int m, int n, int p, DataType* A, DataType* B)
+{
+  if(m != p)
+    return false;
+  int i;
+  bool same = true;
+  #pragma omp parallel for private (i)
+  for(i = 0; i < m*n; i++) {
+    if(A[i] != B[i])
+      same = false;
+  }
+
+  return same;
+}
+
 //This function is the implementation of a matrix x matrix algorithm which computes a matrix of PCC values
 //but increases the arithmetic intensity of the naive pairwise vector x vector correlation
 //A is matrix of X vectors and B is transposed matrix of Y vectors:
@@ -246,6 +261,9 @@ int pcc_matrix(int m, int n, int p,
   DataType beta=0.0;
   int count =1;
   bool transposeB = true; //assume this is always true. 
+
+  bool sameAB = check_same(m, n, p, A, B);
+  printf("sameAB: %d\n", sameAB);
   //info("before calloc\n",1);
   //allocate and initialize and align memory needed to compute PCC
   DataType *N = (DataType *) mkl_calloc( m*p,sizeof( DataType ), 64 );
@@ -258,21 +276,21 @@ int pcc_matrix(int m, int n, int p,
   __assume_aligned(AA, 64);
   DataType* SAA =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 );
   __assume_aligned(SAA, 64);
-  DataType* SB =    ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
+  DataType* SB =    sameAB ? SA : ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
   __assume_aligned(SB, 64);
-  DataType* BB =    ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 ); 
+  DataType* BB =    sameAB ? AA : ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 ); 
   __assume_aligned(BB, 64);
-  DataType* SBB =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
+  DataType* SBB =   sameAB ? SAA : ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 ); 
   __assume_aligned(SBB, 64);
-  DataType* SAB =   ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 );
+  DataType* SAB =   sameAB ? SAA : ( DataType*)mkl_calloc( m*p, sizeof(DataType), 64 );
   __assume_aligned(SAB, 64);
   DataType* UnitA = ( DataType*)mkl_calloc( m*n, sizeof(DataType), 64 );
   __assume_aligned(UnitA, 64);
-  DataType* UnitB = ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 );
+  DataType* UnitB = sameAB ? UnitA : ( DataType*)mkl_calloc( n*p, sizeof(DataType), 64 );
   __assume_aligned(UnitB, 64);  
-  DataType *amask=(DataType*)mkl_calloc( m*n, sizeof(DataType), 64);
+  DataType *amask= (DataType*)mkl_calloc( m*n, sizeof(DataType), 64);
   __assume_aligned(amask, 64);
-  DataType *bmask=(DataType*)mkl_calloc( n*p, sizeof(DataType), 64);
+  DataType *bmask= sameAB ? amask : (DataType*)mkl_calloc( n*p, sizeof(DataType), 64);
   __assume_aligned(bmask, 64);
 
   //info("after calloc\n",1);
@@ -286,14 +304,20 @@ int pcc_matrix(int m, int n, int p,
     mkl_free(SA);
     mkl_free(AA);
     mkl_free(SAA);
-    mkl_free(SB);
-    mkl_free(BB);
-    mkl_free(SBB);
-    mkl_free(SAB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(SB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(BB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(SBB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(SAB);
     mkl_free(UnitA);
-    mkl_free(UnitB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(UnitB);
     mkl_free(amask);
-    mkl_free(bmask);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(bmask);
     #ifndef USING_R
     exit (0);
     #else
@@ -321,15 +345,17 @@ int pcc_matrix(int m, int n, int p,
     }
 
     //if element in B is missing, set bmask and B to 0
-    #pragma omp parallel for private (j,k)
-    for (j=0; j<p; j++) {
-      for (k=0; k<n; k++) {
-        bmask[ j*n + k ] = 1.0;
-        if (CHECKNA(B[j*n+k])) { 
-          bmask[j*n + k] = 0.0;
-          B[j*n + k] = 0.0; // set B to 0.0 for subsequent calculations of PCC terms
-        }else{
-          UnitB[j*n + k] = 1.0;
+    if(!sameAB) { //only do it when A and B are not same
+      #pragma omp parallel for private (j,k)
+      for (j=0; j<p; j++) {
+        for (k=0; k<n; k++) {
+          bmask[ j*n + k ] = 1.0;
+          if (CHECKNA(B[j*n+k])) { 
+            bmask[j*n + k] = 0.0;
+            B[j*n + k] = 0.0; // set B to 0.0 for subsequent calculations of PCC terms
+          }else{
+            UnitB[j*n + k] = 1.0;
+          }
         }
       }
     }
@@ -342,7 +368,8 @@ int pcc_matrix(int m, int n, int p,
     VSQR(m*n,A,AA);
 
     //vsSqr(n*p,B,BB);
-    VSQR(n*p,B,BB);
+    if(!sameAB) //only do it when A and B are not same
+      VSQR(n*p,B,BB);
 
     //variables used for performance timing
     //struct timespec startGEMM, stopGEMM;
@@ -375,7 +402,8 @@ int pcc_matrix(int m, int n, int p,
     // This requires multiplication with a UnitA matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
     //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    if(!sameAB) //only do it when A and B are not same
+      GEMM(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, UnitA, n, B, ldb, beta, SB, p); 
 
 
@@ -392,17 +420,21 @@ int pcc_matrix(int m, int n, int p,
     // This requires multiplication with a UnitA matrix which acts as a mask 
     // to prevent missing data in AB pairs from contributing to the sum
     //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    if(!sameAB) //only do it when A and B are not same
+      GEMM(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, UnitA, n, BB, ldb, beta, SBB, p); 
 
     mkl_free(UnitA);
-    mkl_free(UnitB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(UnitB);
     mkl_free(AA);
-    mkl_free(BB);
+    if(!sameAB) //only do it when A and B are not same
+      mkl_free(BB);
 
     //SAB = A*B
     //cblas_sgemm(CblasRowMajor, CblasNoTrans, transB,
-    GEMM(CblasRowMajor, CblasNoTrans, transB,
+    if(!sameAB) //only do it when A and B are not same
+      GEMM(CblasRowMajor, CblasNoTrans, transB,
          m, p, n, alpha, A, n, B, ldb, beta, SAB, p); 
 
     //clock_gettime(CLOCK_MONOTONIC, &stopGEMM);
@@ -468,9 +500,12 @@ int pcc_matrix(int m, int n, int p,
   mkl_free(N);
   mkl_free(SA);
   mkl_free(SAA);
-  mkl_free(SB);
-  mkl_free(SBB);
-  mkl_free(SAB);
+  if(!sameAB) //only do it when A and B are not same
+      mkl_free(SB);
+  if(!sameAB) //only do it when A and B are not same
+      mkl_free(SBB);
+  if(!sameAB) //only do it when A and B are not same
+      mkl_free(SAB);
 
   return 0;
 };
